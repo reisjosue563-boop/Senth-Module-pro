@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080d19">
+<title>SENTH MIDI PRO</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ background:#080d19;
+ color:white;
+ font-family:Arial,sans-serif;
+}
+header{
+ background:#111d32;
+ padding:20px;
+ border-bottom:2px solid #168bd1;
+}
+h1{color:#42c8ff;margin:0;font-size:26px}
+header p{color:#9bb0c9;font-size:12px}
+main{padding:15px;max-width:900px;margin:auto}
+.panel{
+ background:#142239;
+ border:1px solid #294464;
+ border-radius:14px;
+ padding:16px;
+ margin-bottom:15px;
+}
+h2{font-size:16px;color:#42c8ff}
+select,input{
+ width:100%;
+ padding:12px;
+ background:#091426;
+ color:white;
+ border:1px solid #426080;
+ border-radius:8px;
+}
+button{
+ border:0;
+ border-radius:9px;
+ padding:13px;
+ background:#087fbd;
+ color:white;
+ font-weight:bold;
+}
+.controls{display:flex;gap:10px}
+.controls button{flex:1}
+.keyboard{
+ display:flex;
+ overflow-x:auto;
+ padding:15px 2px;
+ gap:3px;
+}
+.key{
+ flex:0 0 43px;
+ height:145px;
+ background:white;
+ color:black;
+ border:1px solid #aaa;
+ border-radius:0 0 6px 6px;
+ display:flex;
+ align-items:flex-end;
+ justify-content:center;
+ padding-bottom:10px;
+ touch-action:none;
+}
+.key.black{
+ background:#202d43;
+ color:white;
+ height:95px;
+ flex-basis:29px;
+ margin-left:-16px;
+ margin-right:-16px;
+ z-index:2;
+}
+.key.active{background:#42c8ff}
+.small{font-size:12px;color:#9bb0c9}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>🎹 SENTH MIDI PRO</h1>
+<p>PROFESSIONAL SOUND MODULE</p>
+</header>
+
+<main>
+
+<div class="panel">
+<h2>SELEÇÃO DE TIMBRES</h2>
+
+<select id="voice">
+<option value="piano">Grand Piano</option>
+<option value="organ">Church Organ</option>
+<option value="synth">Synth Lead</option>
+<option value="strings">Strings</option>
+<option value="sax">Saxophone</option>
+<option value="bass">Electric Bass</option>
+</select>
+
+<br><br>
+
+<h2>VOLUME MASTER</h2>
+<input type="range" id="volume" min="0" max="100" value="70">
+<p class="small">Volume principal</p>
+</div>
+
+<div class="panel">
+<h2>VIRTUAL KEYBOARD</h2>
+<div class="keyboard" id="keyboard"></div>
+<p class="small">Toca nas teclas para produzir som.</p>
+</div>
+
+<div class="panel">
+<h2>CONTROLO DE ÁUDIO</h2>
+<div class="controls">
+<button id="test">TESTAR SOM</button>
+<button id="stop">PARAR</button>
+</div>
+</div>
+
+<div class="panel">
+<h2>EFEITOS</h2>
+<label class="small">Reverb (ambiente)</label>
+<input id="reverb" type="range" min="0" max="100" value="20">
+<br><br>
+<label class="small">Chorus (modulação)</label>
+<input id="chorus" type="range" min="0" max="100" value="0">
+</div>
+
+<div class="panel">
+<h2>ESTADO DO MÓDULO</h2>
+<p id="status" class="small">SENTH MIDI PRO preparado.</p>
+</div>
+
+</main>
+
+<script>
+let audio;
+let master;
+let active={};
+
+function initAudio(){
+ if(!audio){
+  audio=new(window.AudioContext||window.webkitAudioContext)();
+  master=audio.createGain();
+  master.gain.value=.7;
+  master.connect(audio.destination);
+ }
+ if(audio.state==="suspended")audio.resume();
+}
+
+function frequency(n){
+ return 440*Math.pow(2,(n-69)/12);
+}
+
+function play(n){
+ initAudio();
+ if(active[n])return;
+
+ let voice=document.getElementById("voice").value;
+ let osc=audio.createOscillator();
+ let gain=audio.createGain();
+
+ if(voice==="organ")osc.type="sine";
+ else if(voice==="synth")osc.type="sawtooth";
+ else if(voice==="strings")osc.type="triangle";
+ else if(voice==="bass")osc.type="triangle";
+ else if(voice==="sax")osc.type="sawtooth";
+ else osc.type="triangle";
+
+ osc.frequency.value=frequency(n);
+
+ gain.gain.setValueAtTime(.001,audio.currentTime);
+ gain.gain.exponentialRampToValueAtTime(
+  voice==="piano"?.22:.13,
+  audio.currentTime+.04
+ );
+
+ osc.connect(gain);
+ gain.connect(master);
+ osc.start();
+
+ active[n]={osc:osc,gain:gain};
+ document.getElementById("status").textContent=
+ "A tocar: "+voice;
+}
+
+function release(n){
+ let item=active[n];
+ if(!item)return;
+
+ item.gain.gain.cancelScheduledValues(audio.currentTime);
+ item.gain.gain.setTargetAtTime(.001,audio.currentTime,.08);
+ item.osc.stop(audio.currentTime+.4);
+ delete active[n];
+}
+
+const keyboard=document.getElementById("keyboard");
+const notes=["Dó","Dó#","Ré","Ré#","Mi","Fá",
+"Fá#","Sol","Sol#","Lá","Lá#","Si"];
+const black=[1,3,6,8,10];
+
+for(let n=48;n<84;n++){
+ let key=document.createElement("button");
+ key.className="key "+(black.includes(n%12)?"black":"");
+ key.textContent=notes[n%12];
+
+ key.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  key.classList.add("active");
+  play(n);
+ });
+
+ function up(){
+  key.classList.remove("active");
+  release(n);
+ }
+
+ key.addEventListener("pointerup",up);
+ key.addEventListener("pointerleave",up);
+ key.addEventListener("pointercancel",up);
+
+ keyboard.appendChild(key);
+}
+
+document.getElementById("volume").oninput=e=>{
+ if(master)master.gain.value=e.target.value/100;
+};
+
+document.getElementById("test").onclick=()=>{
+ play(60);
+ setTimeout(()=>release(60),800);
+};
+
+document.getElementById("stop").onclick=()=>{
+ Object.keys(active).forEach(n=>release(Number(n)));
+ document.getElementById("status").textContent="Sons parados.";
+};
+</script>
+
+</body>
+</html>
